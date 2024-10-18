@@ -16,6 +16,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/workspace"
+          element={
+            <ProtectedRoute>
+              <GetPeerDetails />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </>
   );
