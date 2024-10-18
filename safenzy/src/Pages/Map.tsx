@@ -1,34 +1,53 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, FC } from "react";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Polyline,
   useMapEvents,
+  useMap,
 } from "react-leaflet";
-import { LeafletMouseEvent, LatLngTuple } from "leaflet";
+import { LeafletMouseEvent, LatLngTuple, Icon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Openrouteservice from "openrouteservice-js";
+import { Button } from "@/Components/ui/button";
+import { Link } from "react-router-dom";
 
 const ORS_API_KEY = import.meta.env.VITE_ORS_API_KEY;
-
 const ors = new Openrouteservice.Directions({ api_key: ORS_API_KEY });
+
+const BENGALURU_CENTER: LatLngTuple = [12.9716, 77.5946];
+const BENGALURU_BBOX = "77.4399,12.8345,77.7474,13.1036";
 
 interface MapEventsProps {
   onMapClick: (e: LeafletMouseEvent) => void;
 }
 
-const MapEvents: React.FC<MapEventsProps> = ({ onMapClick }) => {
+const MapEvents: FC<MapEventsProps> = ({ onMapClick }) => {
   useMapEvents({
     click: onMapClick,
   });
   return null;
 };
 
-const Map: React.FC = () => {
+const ChangeMapView: FC<{ center: LatLngTuple | null }> = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom());
+    }
+  }, [center, map]);
+  return null;
+};
+
+export const Map: FC = () => {
   const [start, setStart] = useState<LatLngTuple | null>(null);
   const [end, setEnd] = useState<LatLngTuple | null>(null);
   const [route, setRoute] = useState<LatLngTuple[] | null>(null);
+  const [isRiding, setIsRiding] = useState(false);
+  const [userPosition, setUserPosition] = useState<LatLngTuple | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
   const handleMapClick = (e: LeafletMouseEvent) => {
     if (!start) {
@@ -65,45 +84,90 @@ const Map: React.FC = () => {
 
   const startRide = () => {
     if (route) {
-      console.log("Starting ride...");
-      // Implement ride start logic here
+      setIsRiding(true);
+      if ("geolocation" in navigator) {
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            setUserPosition([latitude, longitude]);
+          },
+          (error) => {
+            console.error("Error getting user location:", error);
+          },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        );
+      } else {
+        console.error("Geolocation is not supported by this browser.");
+      }
     } else {
       console.log("Please set start and end points first.");
     }
   };
 
+  const stopRide = () => {
+    setIsRiding(false);
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  const userIcon = new Icon({
+    iconUrl:
+      "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
+
+  const handleSelectLocation = (result: any) => {
+    const [lng, lat] = [parseFloat(result.lon), parseFloat(result.lat)];
+    if (!start) {
+      setStart([lat, lng]);
+    } else if (!end) {
+      setEnd([lat, lng]);
+    }
+    setSearchResults([]);
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-      <header
-        style={{
-          padding: "10px 20px",
-          backgroundColor: "#f0f0f0",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <h1 style={{ margin: 0 }}>Ride Planner</h1>
-        <button
-          onClick={startRide}
-          style={{
-            padding: "10px 20px",
-            fontSize: "16px",
-            backgroundColor: "#4CAF50",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          Start Ride
-        </button>
+    <div className="flex flex-col h-screen">
+      <header className="p-4 bg-gray-100 flex justify-between items-center flex-wrap">
+        <Link to="/">
+          <h1 className="text-2xl font-bold cursor-pointer"> Safenzy</h1>
+        </Link>
+        <div className="flex items-center">
+          <Button
+            onClick={isRiding ? stopRide : startRide}
+            className={`px-4 py-2 text-lg font-semibold text-white rounded-lg`}
+          >
+            {isRiding ? "Stop Ride" : "Start Ride"}
+          </Button>
+        </div>
       </header>
-      <div style={{ flex: 1, position: "relative" }}>
+
+      {searchResults.length > 0 && (
+        <div className="absolute top-16 right-5 bg-white z-50 p-4 rounded-lg shadow-lg">
+          {searchResults.map((result, index) => (
+            <div
+              key={index}
+              onClick={() => handleSelectLocation(result)}
+              className="cursor-pointer py-2"
+            >
+              {result.display_name}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex-1 relative">
         <MapContainer
-          center={[51.505, -0.09]}
-          zoom={13}
-          style={{ height: "100%", width: "100%" }}
+          center={BENGALURU_CENTER}
+          zoom={12}
+          className="w-full h-full"
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -113,10 +177,10 @@ const Map: React.FC = () => {
           {start && <Marker position={start} />}
           {end && <Marker position={end} />}
           {route && <Polyline positions={route} color="blue" />}
+          {userPosition && <Marker position={userPosition} icon={userIcon} />}
+          <ChangeMapView center={userPosition} />
         </MapContainer>
       </div>
     </div>
   );
 };
-
-export default Map;

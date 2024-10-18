@@ -2,7 +2,7 @@ import { ProtectedRoute } from "./Components/ProtectedRoute";
 import { GetPeerDetails } from "./Pages/GetPeerDetails";
 import { Routes, Route } from "react-router-dom";
 import { Home } from "./Pages/Home";
-import Map from "./Pages/Map";
+import { Map } from "./Pages/Map";
 
 export default function App() {
   return (
