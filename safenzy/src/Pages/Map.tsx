@@ -48,6 +48,9 @@ export const Map: FC = () => {
   const [userPosition, setUserPosition] = useState<LatLngTuple | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(
+    null
+  );
 
   const handleMapClick = (e: LeafletMouseEvent) => {
     if (!start) {
@@ -82,22 +85,59 @@ export const Map: FC = () => {
     }
   }, [start, end]);
 
-  const startRide = () => {
+  const startRecording = async () => {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        const recorder = new MediaRecorder(stream);
+
+        recorder.start();
+        setMediaRecorder(recorder);
+
+        if ("geolocation" in navigator) {
+          watchIdRef.current = navigator.geolocation.watchPosition(
+            (position) => {
+              const { latitude, longitude } = position.coords;
+              setUserPosition([latitude, longitude]);
+            },
+            (error) => {
+              console.error("Error getting user location:", error);
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+          );
+        } else {
+          console.error("Geolocation is not supported by this browser.");
+        }
+      } catch (error) {
+        console.error("Error accessing microphone:", error);
+        alert("Microphone permission is required to start the ride.");
+      }
+    }
+  };
+
+  const startRide = async () => {
     if (route) {
-      setIsRiding(true);
-      if ("geolocation" in navigator) {
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            setUserPosition([latitude, longitude]);
-          },
-          (error) => {
-            console.error("Error getting user location:", error);
-          },
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-        );
-      } else {
-        console.error("Geolocation is not supported by this browser.");
+      try {
+        const permission = await navigator.permissions.query({
+          name: "microphone" as PermissionName,
+        });
+
+        if (permission.state === "granted") {
+          startRecording();
+          setIsRiding(true);
+        } else if (permission.state === "prompt") {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          startRecording();
+          setIsRiding(true);
+        } else {
+          console.log("Microphone permission denied. Cannot start ride.");
+          alert("Microphone permission is required to start the ride.");
+        }
+      } catch (error) {
+        console.error("Error checking microphone permission:", error);
+        alert("An error occurred while checking microphone permission.");
       }
     } else {
       console.log("Please set start and end points first.");
@@ -106,9 +146,19 @@ export const Map: FC = () => {
 
   const stopRide = () => {
     setIsRiding(false);
+
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
+    }
+
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+
+      mediaRecorder.onstop = () => {
+        mediaRecorder.stream?.getTracks()?.forEach((track) => track.stop());
+        setMediaRecorder(null);
+      };
     }
   };
 
@@ -134,8 +184,8 @@ export const Map: FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="p-4 bg-gray-100 flex justify-between items-center flex-wrap">
+    <div className="px-6 md:px-[200px] flex flex-col h-screen">
+      <header className="p-4 flex justify-between items-center flex-wrap">
         <Link to="/">
           <h1 className="text-2xl font-bold cursor-pointer"> Safenzy</h1>
         </Link>
