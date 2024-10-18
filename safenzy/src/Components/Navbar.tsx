@@ -27,7 +27,7 @@ export const Navbar: React.FC = () => {
             {!isSignedIn && (
               <Button className="ghost">
                 <SignedOut>
-                  <SignInButton />
+                  <SignInButton forceRedirectUrl="/get-peer-details" />
                 </SignedOut>
               </Button>
             )}

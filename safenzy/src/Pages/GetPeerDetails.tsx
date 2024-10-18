@@ -21,7 +21,6 @@ export const GetPeerDetails: FC = () => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     console.log("Form data:", formData);
-    // You can handle the form submission logic here
   };
 
   return (
